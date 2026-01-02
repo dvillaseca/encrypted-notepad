@@ -9,8 +9,9 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win portable",
     "build:win:installer": "electron-builder --win nsis",
-    "build:mac": "electron-builder --mac dmg",
-    "build:all": "electron-builder --win portable --mac dmg"
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win portable --mac --linux"
   },
   "author": "",
   "license": "MIT",
