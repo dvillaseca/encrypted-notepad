@@ -1,0 +1,379 @@
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const path = require('path');
+const fileHandler = require('./fileHandler');
+const IdleDetector = require('./idleDetector');
+const recentFiles = require('./recentFiles');
+
+let mainWindow = null;
+let idleDetector = null;
+let pendingFilePath = null;
+let currentContent = '';
+let isUnlocked = false;
+
+const DEFAULT_IDLE_TIMEOUT = 2 * 60 * 60 * 1000;
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        minWidth: 600,
+        minHeight: 400,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, '..', 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            backgroundThrottling: false
+        },
+        title: 'Encrypted Notepad',
+        icon: path.join(__dirname, '..', '..', 'assets', 'icon.png')
+    });
+    
+    mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
+    });
+
+    mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    
+    createMenu();
+    setupIdleDetector();
+    setupIpcHandlers();
+
+    const fileArg = process.argv.find(arg => arg.endsWith('.etxt'));
+    if (fileArg) {
+        pendingFilePath = path.resolve(fileArg);
+        mainWindow.webContents.once('did-finish-load', () => {
+            mainWindow.webContents.send('file:openRequested', pendingFilePath);
+        });
+    }
+}
+
+function createMenu() {
+    const template = [
+        {
+            label: 'File',
+            submenu: [
+                {
+                    label: 'New',
+                    accelerator: 'CmdOrCtrl+N',
+                    click: () => mainWindow.webContents.send('file:newRequested')
+                },
+                {
+                    label: 'Open',
+                    accelerator: 'CmdOrCtrl+O',
+                    click: () => handleOpenFile()
+                },
+                {
+                    label: 'Save',
+                    accelerator: 'CmdOrCtrl+S',
+                    click: () => mainWindow.webContents.send('app:requestSave')
+                },
+                {
+                    label: 'Save As',
+                    accelerator: 'CmdOrCtrl+Shift+S',
+                    click: () => handleSaveAs()
+                },
+                { type: 'separator' },
+                {
+                    label: 'Change Password',
+                    click: () => mainWindow.webContents.send('file:changePasswordRequested')
+                },
+                {
+                    label: 'Lock',
+                    accelerator: 'CmdOrCtrl+L',
+                    click: () => triggerLock('manual')
+                },
+                { type: 'separator' },
+                {
+                    label: 'Exit',
+                    accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Alt+F4',
+                    click: () => app.quit()
+                }
+            ]
+        },
+        {
+            label: 'Edit',
+            submenu: [
+                { role: 'undo' },
+                { role: 'redo' },
+                { type: 'separator' },
+                { role: 'cut' },
+                { role: 'copy' },
+                { role: 'paste' },
+                { role: 'selectAll' },
+                { type: 'separator' },
+                {
+                    label: 'Find',
+                    accelerator: 'CmdOrCtrl+F',
+                    click: () => mainWindow.webContents.send('edit:find')
+                },
+                {
+                    label: 'Replace',
+                    accelerator: 'CmdOrCtrl+H',
+                    click: () => mainWindow.webContents.send('edit:replace')
+                }
+            ]
+        },
+        {
+            label: 'View',
+            submenu: [
+                { role: 'reload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' }
+            ]
+        }
+    ];
+
+    if (process.platform === 'darwin') {
+        template.unshift({
+            label: app.getName(),
+            submenu: [
+                { role: 'about' },
+                { type: 'separator' },
+                { role: 'services' },
+                { type: 'separator' },
+                { role: 'hide' },
+                { role: 'hideOthers' },
+                { role: 'unhide' },
+                { type: 'separator' },
+                { role: 'quit' }
+            ]
+        });
+    }
+
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+}
+
+function setupIdleDetector() {
+    idleDetector = new IdleDetector(DEFAULT_IDLE_TIMEOUT);
+    idleDetector.setLockCallback((reason) => {
+        triggerLock(reason);
+    });
+}
+
+function triggerLock(reason) {
+    if (!isUnlocked) return;
+    
+    isUnlocked = false;
+    currentContent = '';
+    fileHandler.clearSession();
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:lock', reason);
+    }
+    
+    idleDetector.stop();
+}
+
+function setupIpcHandlers() {
+    ipcMain.handle('dialog:openFile', async () => {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            filters: [{ name: 'Encrypted Text', extensions: ['etxt'] }],
+            properties: ['openFile']
+        });
+        
+        if (!result.canceled && result.filePaths.length > 0) {
+            return result.filePaths[0];
+        }
+        return null;
+    });
+
+    ipcMain.handle('dialog:saveFile', async () => {
+        if (fileHandler.hasOpenFile()) {
+            return fileHandler.getCurrentFilePath();
+        }
+        return await showSaveDialog();
+    });
+
+    ipcMain.handle('dialog:saveFileAs', async () => {
+        return await showSaveDialog();
+    });
+
+    ipcMain.handle('file:openExisting', async (event, filePath, password) => {
+        try {
+            const content = await fileHandler.readEncryptedFile(filePath, password);
+            currentContent = content;
+            isUnlocked = true;
+            idleDetector.unlock();
+            idleDetector.start();
+            updateWindowTitle(filePath);
+            recentFiles.addRecentFile(filePath);
+            return { success: true, content };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('file:createNew', async (event, filePath, password) => {
+        try {
+            await fileHandler.createNewEncryptedFile(filePath, password);
+            currentContent = '';
+            isUnlocked = true;
+            idleDetector.unlock();
+            idleDetector.start();
+            updateWindowTitle(filePath);
+            recentFiles.addRecentFile(filePath);
+            return { success: true, content: '' };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('file:saveContent', async (event, content) => {
+        try {
+            currentContent = content;
+            await fileHandler.saveCurrentFile(content);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('file:saveAs', async (event, filePath, content) => {
+        try {
+            currentContent = content;
+            await fileHandler.saveAsFile(filePath, content);
+            updateWindowTitle(filePath);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('file:getCurrentPath', () => {
+        return fileHandler.getCurrentFilePath();
+    });
+
+    ipcMain.handle('settings:get', () => {
+        return {
+            idleTimeout: DEFAULT_IDLE_TIMEOUT
+        };
+    });
+
+    ipcMain.handle('settings:set', (event, settings) => {
+        if (settings.idleTimeout) {
+            idleDetector.setTimeout(settings.idleTimeout);
+        }
+        return true;
+    });
+
+    ipcMain.on('user:activity', () => {
+        if (idleDetector && isUnlocked) {
+            idleDetector.onUserActivity();
+        }
+    });
+
+    ipcMain.on('app:manualLock', () => {
+        triggerLock('manual');
+    });
+
+    ipcMain.on('app:quit', () => {
+        app.quit();
+    });
+
+    ipcMain.on('window:setTitle', (event, title) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.setTitle(title);
+        }
+    });
+
+    ipcMain.handle('recentFiles:get', () => {
+        return recentFiles.getRecentFiles();
+    });
+
+    ipcMain.handle('recentFiles:remove', (event, filePath) => {
+        recentFiles.removeRecentFile(filePath);
+        return recentFiles.getRecentFiles();
+    });
+
+    ipcMain.handle('recentFiles:clear', () => {
+        recentFiles.clearRecentFiles();
+        return [];
+    });
+
+    ipcMain.handle('file:changePassword', async (event, newPassword, content) => {
+        try {
+            await fileHandler.changePassword(newPassword, content);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('file:hasOpenFile', () => {
+        return fileHandler.hasOpenFile();
+    });
+}
+
+async function showSaveDialog() {
+    const result = await dialog.showSaveDialog(mainWindow, {
+        filters: [{ name: 'Encrypted Text', extensions: ['etxt'] }],
+        defaultPath: 'untitled.etxt'
+    });
+    
+    if (!result.canceled) {
+        return result.filePath;
+    }
+    return null;
+}
+
+async function handleOpenFile() {
+    const filePath = await dialog.showOpenDialog(mainWindow, {
+        filters: [{ name: 'Encrypted Text', extensions: ['etxt'] }],
+        properties: ['openFile']
+    });
+    
+    if (!filePath.canceled && filePath.filePaths.length > 0) {
+        mainWindow.webContents.send('file:openRequested', filePath.filePaths[0]);
+    }
+}
+
+async function handleSaveAs() {
+    const filePath = await showSaveDialog();
+    if (filePath) {
+        mainWindow.webContents.send('file:saveAsRequested', filePath);
+    }
+}
+
+function updateWindowTitle(filePath) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        const fileName = path.basename(filePath);
+        mainWindow.setTitle(`${fileName} - Encrypted Notepad`);
+    }
+}
+
+app.whenReady().then(() => {
+    createWindow();
+
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
+});
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+app.on('before-quit', () => {
+    currentContent = '';
+    fileHandler.clearSession();
+});
+
+app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    if (mainWindow) {
+        mainWindow.webContents.send('file:openRequested', filePath);
+    } else {
+        pendingFilePath = filePath;
+    }
+});

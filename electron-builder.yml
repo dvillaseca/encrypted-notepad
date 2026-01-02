@@ -1,0 +1,79 @@
+appId: com.encryptednotepad.app
+productName: Encrypted Notepad
+
+asar: true
+compression: maximum
+
+directories:
+  output: dist
+  buildResources: assets
+
+files:
+  - src/**/*
+  - node_modules/monaco-editor/min/**/*
+  - package.json
+
+asarUnpack:
+  - node_modules/monaco-editor/min/vs/**/*
+
+fileAssociations:
+  - ext: etxt
+    name: Encrypted Text File
+    description: Encrypted text file created by Encrypted Notepad
+    mimeType: application/x-encrypted-text
+    role: Editor
+    icon: assets/icon.ico
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.ico
+  artifactName: EncryptedNotepad-${version}-win-portable.exe
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  icon: assets/icon.icns
+  category: public.app-category.productivity
+  artifactName: EncryptedNotepad-${version}-mac.${ext}
+  darkModeSupport: true
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: assets/icon.png
+  category: Utility
+  artifactName: EncryptedNotepad-${version}-linux.${ext}
+
+portable:
+  artifactName: EncryptedNotepad-${version}-portable.exe
+  requestExecutionLevel: user
+
+dmg:
+  artifactName: EncryptedNotepad-${version}.dmg
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+publish: null

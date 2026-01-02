@@ -1,0 +1,55 @@
+{
+  "name": "encrypted-notepad",
+  "version": "1.0.0",
+  "description": "A secure encrypted notepad with Monaco editor",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win portable",
+    "build:win:installer": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg",
+    "build:all": "electron-builder --win portable --mac dmg"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.45.0"
+  },
+  "build": {
+    "appId": "com.encryptednotepad.app",
+    "productName": "Encrypted Notepad",
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "etxt",
+        "name": "Encrypted Text File",
+        "mimeType": "application/x-encrypted-text",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity"
+    },
+    "portable": {
+      "artifactName": "EncryptedNotepad-${version}-portable.exe"
+    },
+    "dmg": {
+      "artifactName": "EncryptedNotepad-${version}.dmg"
+    }
+  }
+}

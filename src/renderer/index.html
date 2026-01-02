@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:;">
+    <title>Encrypted Notepad</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <div id="password-overlay" class="overlay active">
+            <div class="password-dialog">
+                <div class="dialog-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <circle cx="12" cy="16" r="1"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                </div>
+                <h2 id="dialog-title">Encrypted Notepad</h2>
+                <p id="dialog-message">Enter password to unlock your file</p>
+                
+                <div class="input-group">
+                    <input type="password" id="password-input" placeholder="Password" autocomplete="off" autofocus>
+                    <button type="button" id="toggle-password" class="icon-btn" title="Toggle visibility">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div id="confirm-group" class="input-group hidden">
+                    <input type="password" id="password-confirm" placeholder="Confirm password" autocomplete="off">
+                </div>
+                
+                <div id="error-message" class="error-message hidden"></div>
+                
+                <div class="dialog-buttons">
+                    <button id="btn-cancel" class="btn btn-secondary hidden">Cancel</button>
+                    <button id="btn-submit" class="btn btn-primary">Unlock</button>
+                </div>
+                
+                <div id="recent-files-section" class="recent-files-section hidden">
+                    <div class="recent-files-header">
+                        <span>Recent Files</span>
+                        <button id="btn-clear-recent" class="clear-btn" title="Clear recent files">Clear</button>
+                    </div>
+                    <ul id="recent-files-list" class="recent-files-list"></ul>
+                </div>
+                
+                <div class="dialog-footer">
+                    <button id="btn-new-file" class="link-btn">Create new encrypted file</button>
+                    <span class="separator">•</span>
+                    <button id="btn-open-file" class="link-btn">Open existing file</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="change-password-overlay" class="overlay">
+            <div class="password-dialog">
+                <div class="dialog-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <circle cx="12" cy="16" r="1"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                </div>
+                <h2>Change Password</h2>
+                <p>Enter a new password for this file</p>
+                
+                <div class="input-group">
+                    <input type="password" id="new-password-input" placeholder="New password" autocomplete="off">
+                    <button type="button" id="toggle-new-password" class="icon-btn" title="Toggle visibility">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="input-group">
+                    <input type="password" id="new-password-confirm" placeholder="Confirm new password" autocomplete="off">
+                </div>
+                
+                <div id="change-password-error" class="error-message hidden"></div>
+                <div id="change-password-success" class="success-message hidden"></div>
+                
+                <div class="dialog-buttons">
+                    <button id="btn-cancel-change-password" class="btn btn-secondary">Cancel</button>
+                    <button id="btn-change-password" class="btn btn-primary">Change Password</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="editor-container"></div>
+    </div>
+    
+    <script src="renderer.js" type="module"></script>
+</body>
+</html>
