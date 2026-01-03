@@ -19,8 +19,8 @@ jobs:
             platform: win
           - os: macos-latest
             platform: mac
-          - os: ubuntu-latest
-            platform: linux
+          # - os: ubuntu-latest
+          #   platform: linux
 
     runs-on: ${{ matrix.os }}
 
@@ -45,9 +45,9 @@ jobs:
         if: matrix.platform == 'mac'
         run: npm run build:mac
 
-      - name: Build for Linux
-        if: matrix.platform == 'linux'
-        run: npm run build:linux
+      # - name: Build for Linux
+      #   if: matrix.platform == 'linux'
+      #   run: npm run build:linux
 
       - name: Upload Windows artifacts
         if: matrix.platform == 'win'
@@ -68,14 +68,14 @@ jobs:
             dist/*.zip
           if-no-files-found: error
 
-      - name: Upload Linux artifacts
-        if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: |
-            dist/*.AppImage
-          if-no-files-found: error
+      # - name: Upload Linux artifacts
+      #   if: matrix.platform == 'linux'
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: linux-build
+      #     path: |
+      #       dist/*.AppImage
+      #     if-no-files-found: error
 
   release:
     needs: build
