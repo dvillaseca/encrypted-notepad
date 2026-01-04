@@ -2,6 +2,7 @@ let editor = null;
 let isMonacoLoaded = false;
 let currentMode = 'unlock';
 let pendingFilePath = null;
+let currentFilePath = null;
 let hasUnsavedChanges = false;
 
 const passwordOverlay = document.getElementById('password-overlay');
@@ -273,6 +274,7 @@ async function handleSubmit() {
         
         const result = await window.electronAPI.createNewFile(filePath, password);
         if (result.success) {
+            currentFilePath = filePath;
             await createEditor('');
             hideOverlay();
             hasUnsavedChanges = false;
@@ -285,6 +287,7 @@ async function handleSubmit() {
     if (currentMode === 'unlock' && pendingFilePath) {
         const result = await window.electronAPI.openExistingFile(pendingFilePath, password);
         if (result.success) {
+            currentFilePath = pendingFilePath;
             await createEditor(result.content);
             hideOverlay();
             hasUnsavedChanges = false;
@@ -343,8 +346,13 @@ function handleLock(reason) {
             break;
     }
     
-    dialogMessage.textContent = message;
-    setMode('initial');
+    if (currentFilePath) {
+        setMode('unlock', currentFilePath);
+        dialogMessage.textContent = message;
+    } else {
+        dialogMessage.textContent = message;
+        setMode('initial');
+    }
 }
 
 function reportActivity() {
@@ -501,6 +509,7 @@ window.electronAPI.onSaveAsRequested(async (filePath) => {
     const content = editor.getValue();
     const result = await window.electronAPI.saveAs(filePath, content);
     if (result.success) {
+        currentFilePath = filePath;
         hasUnsavedChanges = false;
     }
 });
