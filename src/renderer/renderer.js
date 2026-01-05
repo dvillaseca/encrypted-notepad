@@ -4,6 +4,7 @@ let currentMode = 'unlock';
 let pendingFilePath = null;
 let currentFilePath = null;
 let hasUnsavedChanges = false;
+let currentTheme = 'dark';
 
 const passwordOverlay = document.getElementById('password-overlay');
 const passwordInput = document.getElementById('password-input');
@@ -59,6 +60,21 @@ async function initMonaco() {
     })();
     
     return monacoLoadPromise;
+}
+
+function applyTheme(theme) {
+    currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+
+    if (editor && isMonacoLoaded) {
+        const monacoTheme = theme === 'light' ? 'vs' : 'vs-dark';
+        monaco.editor.setTheme(monacoTheme);
+    }
+}
+
+async function loadTheme() {
+    const theme = await window.electronAPI.getTheme();
+    applyTheme(theme);
 }
 
 async function loadRecentFiles() {
@@ -132,10 +148,11 @@ async function createEditor(content = '') {
         editor.dispose();
     }
     
+    const monacoTheme = currentTheme === 'light' ? 'vs' : 'vs-dark';
     editor = monaco.editor.create(editorContainer, {
         value: content,
         language: 'plaintext',
-        theme: 'vs-dark',
+        theme: monacoTheme,
         lineNumbers: 'on',
         wordWrap: 'on',
         minimap: { enabled: false },
@@ -549,7 +566,12 @@ document.addEventListener('keydown', (e) => {
     reportActivity();
 });
 
+window.electronAPI.onThemeChanged((theme) => {
+    applyTheme(theme);
+});
+
 setMode('initial');
 loadRecentFiles();
+loadTheme();
 
 setTimeout(() => initMonaco(), 100);

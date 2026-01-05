@@ -42,5 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearRecentFiles: () => ipcRenderer.invoke('recentFiles:clear'),
     
     changePassword: (newPassword, content) => ipcRenderer.invoke('file:changePassword', newPassword, content),
-    hasOpenFile: () => ipcRenderer.invoke('file:hasOpenFile')
+    hasOpenFile: () => ipcRenderer.invoke('file:hasOpenFile'),
+
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
+    onThemeChanged: (callback) => ipcRenderer.on('theme:changed', (event, theme) => callback(theme))
 });

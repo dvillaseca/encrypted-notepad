@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme } = require('electron');
 const path = require('path');
 const fileHandler = require('./fileHandler');
 const IdleDetector = require('./idleDetector');
 const recentFiles = require('./recentFiles');
+const settings = require('./settings');
 
 let mainWindow = null;
 let idleDetector = null;
@@ -117,6 +118,26 @@ function createMenu() {
         {
             label: 'View',
             submenu: [
+                {
+                    label: 'Theme',
+                    submenu: [
+                        {
+                            label: 'Dark',
+                            type: 'radio',
+                            id: 'theme-dark',
+                            checked: settings.getTheme() === 'dark',
+                            click: () => setTheme('dark')
+                        },
+                        {
+                            label: 'Light',
+                            type: 'radio',
+                            id: 'theme-light',
+                            checked: settings.getTheme() === 'light',
+                            click: () => setTheme('light')
+                        }
+                    ]
+                },
+                { type: 'separator' },
                 { role: 'reload' },
                 { role: 'toggleDevTools' },
                 { type: 'separator' },
@@ -309,6 +330,15 @@ function setupIpcHandlers() {
     ipcMain.handle('file:hasOpenFile', () => {
         return fileHandler.hasOpenFile();
     });
+
+    ipcMain.handle('theme:get', () => {
+        return settings.getTheme();
+    });
+
+    ipcMain.handle('theme:set', (event, theme) => {
+        setTheme(theme);
+        return true;
+    });
 }
 
 async function showSaveDialog() {
@@ -348,7 +378,21 @@ function updateWindowTitle(filePath) {
     }
 }
 
+function setTheme(theme) {
+    settings.setTheme(theme);
+    nativeTheme.themeSource = theme;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('theme:changed', theme);
+    }
+}
+
+function applyInitialTheme() {
+    const theme = settings.getTheme();
+    nativeTheme.themeSource = theme;
+}
+
 app.whenReady().then(() => {
+    applyInitialTheme();
     createWindow();
 
     app.on('activate', () => {
