@@ -171,7 +171,10 @@ async function createEditor(content = '') {
     });
     
     editor.onDidChangeModelContent(() => {
-        hasUnsavedChanges = true;
+        if (!hasUnsavedChanges) {
+            hasUnsavedChanges = true;
+            updateWindowTitle();
+        }
         reportActivity();
     });
     
@@ -264,6 +267,14 @@ function getFileName(filePath) {
     return filePath.split(/[/\\]/).pop();
 }
 
+function updateWindowTitle() {
+    if (!currentFilePath) return;
+    const fileName = getFileName(currentFilePath);
+    const prefix = hasUnsavedChanges ? '*' : '';
+    window.electronAPI.setTitle(`${prefix}${fileName} - Encrypted Notepad`);
+    window.electronAPI.setUnsavedChanges(hasUnsavedChanges);
+}
+
 async function handleSubmit() {
     const password = passwordInput.value;
     
@@ -336,6 +347,8 @@ async function handleSave() {
     
     if (result.success) {
         hasUnsavedChanges = false;
+        updateWindowTitle();
+        window.electronAPI.notifySaved();
     } else {
         console.error('Save failed:', result.error);
     }
@@ -443,6 +456,7 @@ async function handleChangePassword() {
     if (result.success) {
         showChangePasswordSuccess('Password changed successfully');
         hasUnsavedChanges = false;
+        updateWindowTitle();
         setTimeout(() => {
             hideChangePasswordDialog();
         }, 1500);
@@ -528,6 +542,7 @@ window.electronAPI.onSaveAsRequested(async (filePath) => {
     if (result.success) {
         currentFilePath = filePath;
         hasUnsavedChanges = false;
+        updateWindowTitle();
     }
 });
 

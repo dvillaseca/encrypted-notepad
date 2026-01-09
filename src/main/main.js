@@ -10,6 +10,7 @@ let idleDetector = null;
 let pendingFilePath = null;
 let currentContent = '';
 let isUnlocked = false;
+let hasUnsavedChanges = false;
 
 const DEFAULT_IDLE_TIMEOUT = 2 * 60 * 60 * 1000;
 
@@ -35,6 +36,33 @@ function createWindow() {
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    
+    mainWindow.on('close', (e) => {
+        if (!hasUnsavedChanges) return;
+        
+        e.preventDefault();
+        dialog.showMessageBox(mainWindow, {
+            type: 'warning',
+            buttons: ['Save', "Don't Save", 'Cancel'],
+            defaultId: 0,
+            cancelId: 2,
+            title: 'Unsaved Changes',
+            message: 'You have unsaved changes. Do you want to save before closing?'
+        }).then(({ response }) => {
+            if (response === 0) {
+                mainWindow.webContents.send('app:requestSave');
+                mainWindow.webContents.once('ipc-message', (event, channel) => {
+                    if (channel === 'file:saved') {
+                        hasUnsavedChanges = false;
+                        mainWindow.destroy();
+                    }
+                });
+            } else if (response === 1) {
+                hasUnsavedChanges = false;
+                mainWindow.destroy();
+            }
+        });
+    });
     
     createMenu();
     setupIdleDetector();
@@ -302,6 +330,14 @@ function setupIpcHandlers() {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.setTitle(title);
         }
+    });
+
+    ipcMain.on('file:setUnsavedChanges', (event, value) => {
+        hasUnsavedChanges = value;
+    });
+
+    ipcMain.on('file:saved', () => {
+        hasUnsavedChanges = false;
     });
 
     ipcMain.handle('recentFiles:get', () => {

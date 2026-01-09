@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     quit: () => ipcRenderer.send('app:quit'),
     
     setTitle: (title) => ipcRenderer.send('window:setTitle', title),
+    setUnsavedChanges: (value) => ipcRenderer.send('file:setUnsavedChanges', value),
+    notifySaved: () => ipcRenderer.send('file:saved'),
     
     getRecentFiles: () => ipcRenderer.invoke('recentFiles:get'),
     removeRecentFile: (filePath) => ipcRenderer.invoke('recentFiles:remove', filePath),
