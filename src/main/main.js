@@ -11,6 +11,7 @@ let pendingFilePath = null;
 let currentContent = '';
 let isUnlocked = false;
 let hasUnsavedChanges = false;
+let pendingUnsavedContent = null;
 
 const DEFAULT_IDLE_TIMEOUT = 2 * 60 * 60 * 1000;
 
@@ -206,8 +207,19 @@ function setupIdleDetector() {
     });
 }
 
-function triggerLock(reason) {
+async function triggerLock(reason) {
     if (!isUnlocked) return;
+    
+    if (hasUnsavedChanges && mainWindow && !mainWindow.isDestroyed()) {
+        const content = await new Promise(resolve => {
+            ipcMain.once('editor:content', (event, c) => resolve(c));
+            mainWindow.webContents.send('editor:requestContent');
+            setTimeout(() => resolve(null), 1000);
+        });
+        pendingUnsavedContent = content ? fileHandler.encryptPendingContent(content) : null;
+    } else {
+        pendingUnsavedContent = null;
+    }
     
     isUnlocked = false;
     currentContent = '';
@@ -246,15 +258,28 @@ function setupIpcHandlers() {
 
     ipcMain.handle('file:openExisting', async (event, filePath, password) => {
         try {
-            const content = await fileHandler.readEncryptedFile(filePath, password);
+            const savedContent = await fileHandler.readEncryptedFile(filePath, password);
+            let content = savedContent;
+            let hasPendingChanges = false;
+            
+            if (pendingUnsavedContent) {
+                const decrypted = fileHandler.decryptPendingContent(pendingUnsavedContent, password);
+                if (decrypted !== null) {
+                    content = decrypted;
+                    hasPendingChanges = true;
+                }
+            }
+            
+            pendingUnsavedContent = null;
             currentContent = content;
             isUnlocked = true;
             idleDetector.unlock();
             idleDetector.start();
             updateWindowTitle(filePath);
             recentFiles.addRecentFile(filePath);
-            return { success: true, content };
+            return { success: true, content, hasUnsavedChanges: hasPendingChanges };
         } catch (error) {
+            pendingUnsavedContent = null;
             return { success: false, error: error.message };
         }
     });

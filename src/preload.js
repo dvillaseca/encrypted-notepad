@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onFind: (callback) => ipcRenderer.on('edit:find', () => callback()),
     onReplace: (callback) => ipcRenderer.on('edit:replace', () => callback()),
     onChangePasswordRequested: (callback) => ipcRenderer.on('file:changePasswordRequested', () => callback()),
+    onRequestContent: (callback) => ipcRenderer.on('editor:requestContent', () => callback()),
+    sendContent: (content) => ipcRenderer.send('editor:content', content),
     
     reportActivity: () => ipcRenderer.send('user:activity'),
     lock: () => ipcRenderer.send('app:manualLock'),

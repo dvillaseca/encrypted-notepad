@@ -4,6 +4,7 @@ let currentMode = 'unlock';
 let pendingFilePath = null;
 let currentFilePath = null;
 let hasUnsavedChanges = false;
+let isLocking = false;
 let currentTheme = 'dark';
 
 const passwordOverlay = document.getElementById('password-overlay');
@@ -171,6 +172,7 @@ async function createEditor(content = '') {
     });
     
     editor.onDidChangeModelContent(() => {
+        if (isLocking) return;
         if (!hasUnsavedChanges) {
             hasUnsavedChanges = true;
             updateWindowTitle();
@@ -229,6 +231,9 @@ function setMode(mode, filePath = null) {
             btnSubmit.textContent = 'Create File';
             btnCancel.classList.remove('hidden');
             btnNewFile.parentElement.classList.add('hidden');
+            if (filePath) {
+                window.electronAPI.setTitle(`${getFileName(filePath)} - Encrypted Notepad`);
+            }
             break;
             
         case 'unlock':
@@ -240,6 +245,9 @@ function setMode(mode, filePath = null) {
             btnSubmit.textContent = 'Unlock';
             btnCancel.classList.remove('hidden');
             btnNewFile.parentElement.classList.add('hidden');
+            if (filePath) {
+                window.electronAPI.setTitle(`${getFileName(filePath)} - Encrypted Notepad`);
+            }
             break;
             
         case 'initial':
@@ -252,6 +260,7 @@ function setMode(mode, filePath = null) {
             btnCancel.classList.add('hidden');
             btnNewFile.parentElement.classList.remove('hidden');
             loadRecentFiles();
+            window.electronAPI.setTitle('Encrypted Notepad');
             break;
     }
     
@@ -318,7 +327,8 @@ async function handleSubmit() {
             currentFilePath = pendingFilePath;
             await createEditor(result.content);
             hideOverlay();
-            hasUnsavedChanges = false;
+            hasUnsavedChanges = result.hasUnsavedChanges || false;
+            updateWindowTitle();
         } else {
             showError('Incorrect password or corrupted file');
         }
@@ -355,10 +365,16 @@ async function handleSave() {
 }
 
 function handleLock(reason) {
+    isLocking = true;
     if (editor) {
         editor.setValue('');
     }
+    isLocking = false;
     hasUnsavedChanges = false;
+    window.electronAPI.setUnsavedChanges(false);
+    if (currentFilePath) {
+        window.electronAPI.setTitle(`${getFileName(currentFilePath)} - Encrypted Notepad`);
+    }
     
     let message = 'Session locked';
     switch (reason) {
@@ -559,6 +575,11 @@ window.electronAPI.onChangePasswordRequested(async () => {
     if (hasFile) {
         showChangePasswordDialog();
     }
+});
+
+window.electronAPI.onRequestContent(() => {
+    const content = editor ? editor.getValue() : '';
+    window.electronAPI.sendContent(content);
 });
 
 document.addEventListener('keydown', (e) => {

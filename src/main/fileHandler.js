@@ -58,6 +58,19 @@ function clearSession() {
     currentFilePath = null;
 }
 
+function encryptPendingContent(content) {
+    if (!currentPassword) return null;
+    return crypto.encrypt(content, currentPassword);
+}
+
+function decryptPendingContent(encryptedBuffer, password) {
+    try {
+        return crypto.decrypt(encryptedBuffer, password);
+    } catch {
+        return null;
+    }
+}
+
 async function changePassword(newPassword, content) {
     if (!hasOpenFile()) {
         throw new Error('No file is currently open');
@@ -86,5 +99,7 @@ module.exports = {
     getFileExtension,
     isEncryptedFile,
     setCurrentFile,
-    changePassword
+    changePassword,
+    encryptPendingContent,
+    decryptPendingContent
 };
