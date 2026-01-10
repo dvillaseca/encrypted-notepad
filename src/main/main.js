@@ -4,6 +4,7 @@ const fileHandler = require('./fileHandler');
 const IdleDetector = require('./idleDetector');
 const recentFiles = require('./recentFiles');
 const settings = require('./settings');
+const recoveryManager = require('./recoveryManager');
 
 let mainWindow = null;
 let idleDetector = null;
@@ -256,32 +257,65 @@ function setupIpcHandlers() {
         return await showSaveDialog();
     });
 
-    ipcMain.handle('file:openExisting', async (event, filePath, password) => {
+    ipcMain.handle('file:openExisting', async (event, filePath, password, useRecovery = false) => {
         try {
             const savedContent = await fileHandler.readEncryptedFile(filePath, password);
-            let content = savedContent;
             let hasPendingChanges = false;
+            let recoveryEditHistory = null;
             
             if (pendingUnsavedContent) {
                 const decrypted = fileHandler.decryptPendingContent(pendingUnsavedContent, password);
                 if (decrypted !== null) {
-                    content = decrypted;
+                    recoveryEditHistory = [{ 
+                        changes: [{ 
+                            range: { startLineNumber: 1, startColumn: 1, endLineNumber: Infinity, endColumn: Infinity },
+                            text: decrypted 
+                        }]
+                    }];
+                    hasPendingChanges = true;
+                }
+            } else if (useRecovery && recoveryManager.hasRecoveryFile(filePath)) {
+                const recoveryData = recoveryManager.loadRecoveryFile(filePath, password);
+                if (recoveryData && recoveryData.editHistory) {
+                    recoveryEditHistory = recoveryData.editHistory;
                     hasPendingChanges = true;
                 }
             }
             
             pendingUnsavedContent = null;
-            currentContent = content;
             isUnlocked = true;
             idleDetector.unlock();
             idleDetector.start();
             updateWindowTitle(filePath);
             recentFiles.addRecentFile(filePath);
-            return { success: true, content, hasUnsavedChanges: hasPendingChanges };
+            return { 
+                success: true, 
+                content: savedContent, 
+                editHistory: recoveryEditHistory,
+                hasUnsavedChanges: hasPendingChanges 
+            };
         } catch (error) {
             pendingUnsavedContent = null;
             return { success: false, error: error.message };
         }
+    });
+
+    ipcMain.handle('recovery:check', (event, filePath) => {
+        if (!recoveryManager.hasRecoveryFile(filePath)) return null;
+        const info = recoveryManager.getRecoveryInfo(filePath);
+        return info;
+    });
+
+    ipcMain.handle('recovery:save', (event, filePath, editHistory) => {
+        const password = fileHandler.getCurrentPassword();
+        if (!password) return false;
+        recoveryManager.saveRecoveryFileDebounced(filePath, editHistory, password);
+        return true;
+    });
+
+    ipcMain.handle('recovery:delete', (event, filePath) => {
+        recoveryManager.deleteRecoveryFile(filePath);
+        return true;
     });
 
     ipcMain.handle('file:createNew', async (event, filePath, password) => {
@@ -303,6 +337,10 @@ function setupIpcHandlers() {
         try {
             currentContent = content;
             await fileHandler.saveCurrentFile(content);
+            const filePath = fileHandler.getCurrentFilePath();
+            if (filePath) {
+                recoveryManager.deleteRecoveryFile(filePath);
+            }
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

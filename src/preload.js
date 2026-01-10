@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveAs: (filePath, content) => ipcRenderer.invoke('file:saveAs', filePath, content),
     
     createNewFile: (filePath, password) => ipcRenderer.invoke('file:createNew', filePath, password),
-    openExistingFile: (filePath, password) => ipcRenderer.invoke('file:openExisting', filePath, password),
+    openExistingFile: (filePath, password, useRecovery) => ipcRenderer.invoke('file:openExisting', filePath, password, useRecovery),
     
     onLock: (callback) => ipcRenderer.on('app:lock', (event, reason) => callback(reason)),
     onRequestSave: (callback) => ipcRenderer.on('app:requestSave', () => callback()),
@@ -50,5 +50,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     getTheme: () => ipcRenderer.invoke('theme:get'),
     setTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
-    onThemeChanged: (callback) => ipcRenderer.on('theme:changed', (event, theme) => callback(theme))
+    onThemeChanged: (callback) => ipcRenderer.on('theme:changed', (event, theme) => callback(theme)),
+
+    checkRecovery: (filePath) => ipcRenderer.invoke('recovery:check', filePath),
+    saveRecovery: (filePath, editHistory) => ipcRenderer.invoke('recovery:save', filePath, editHistory),
+    deleteRecovery: (filePath) => ipcRenderer.invoke('recovery:delete', filePath)
 });

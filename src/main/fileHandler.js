@@ -14,6 +14,10 @@ function getCurrentFilePath() {
     return currentFilePath;
 }
 
+function getCurrentPassword() {
+    return currentPassword;
+}
+
 function hasOpenFile() {
     return currentFilePath !== null && currentPassword !== null;
 }
@@ -95,6 +99,7 @@ module.exports = {
     createNewEncryptedFile,
     clearSession,
     getCurrentFilePath,
+    getCurrentPassword,
     hasOpenFile,
     getFileExtension,
     isEncryptedFile,

@@ -6,6 +6,9 @@ let currentFilePath = null;
 let hasUnsavedChanges = false;
 let isLocking = false;
 let currentTheme = 'dark';
+let pendingRecoveryFile = null;
+let editHistory = [];
+let savedContent = '';
 
 const passwordOverlay = document.getElementById('password-overlay');
 const passwordInput = document.getElementById('password-input');
@@ -171,11 +174,30 @@ async function createEditor(content = '') {
         lineNumbersMinChars: 4
     });
     
-    editor.onDidChangeModelContent(() => {
+    editor.onDidChangeModelContent((e) => {
         if (isLocking) return;
-        if (!hasUnsavedChanges) {
-            hasUnsavedChanges = true;
+        
+        const currentContent = editor.getValue();
+        const isModified = currentContent !== savedContent;
+        
+        if (isModified !== hasUnsavedChanges) {
+            hasUnsavedChanges = isModified;
             updateWindowTitle();
+        }
+        
+        const changes = e.changes.map(change => ({
+            range: {
+                startLineNumber: change.range.startLineNumber,
+                startColumn: change.range.startColumn,
+                endLineNumber: change.range.endLineNumber,
+                endColumn: change.range.endColumn
+            },
+            text: change.text
+        }));
+        editHistory.push({ changes, isUndo: e.isUndoing, isRedo: e.isRedoing });
+        
+        if (isModified) {
+            saveToRecovery();
         }
         reportActivity();
     });
@@ -247,6 +269,7 @@ function setMode(mode, filePath = null) {
             btnNewFile.parentElement.classList.add('hidden');
             if (filePath) {
                 window.electronAPI.setTitle(`${getFileName(filePath)} - Encrypted Notepad`);
+                checkForRecovery(filePath);
             }
             break;
             
@@ -284,6 +307,30 @@ function updateWindowTitle() {
     window.electronAPI.setUnsavedChanges(hasUnsavedChanges);
 }
 
+function saveToRecovery() {
+    if (!currentFilePath || !editor) return;
+    window.electronAPI.saveRecovery(currentFilePath, editHistory);
+}
+
+async function checkForRecovery(filePath) {
+    const recoveryInfo = await window.electronAPI.checkRecovery(filePath);
+    if (recoveryInfo) {
+        const date = new Date(recoveryInfo.timestamp);
+        const timeStr = date.toLocaleString();
+        dialogMessage.innerHTML = `Recovery file found from ${timeStr}.<br>Enter password to restore unsaved changes. <a href="#" id="discard-recovery" style="color: var(--text-secondary);">Discard recovery</a>`;
+        pendingRecoveryFile = filePath;
+        
+        document.getElementById('discard-recovery').addEventListener('click', (e) => {
+            e.preventDefault();
+            pendingRecoveryFile = null;
+            window.electronAPI.deleteRecovery(filePath);
+            dialogMessage.textContent = `Enter password to unlock: ${getFileName(filePath)}`;
+        });
+    } else {
+        pendingRecoveryFile = null;
+    }
+}
+
 async function handleSubmit() {
     const password = passwordInput.value;
     
@@ -312,6 +359,8 @@ async function handleSubmit() {
         const result = await window.electronAPI.createNewFile(filePath, password);
         if (result.success) {
             currentFilePath = filePath;
+            savedContent = '';
+            editHistory = [];
             await createEditor('');
             hideOverlay();
             hasUnsavedChanges = false;
@@ -322,12 +371,46 @@ async function handleSubmit() {
     }
     
     if (currentMode === 'unlock' && pendingFilePath) {
-        const result = await window.electronAPI.openExistingFile(pendingFilePath, password);
+        let useRecovery = pendingRecoveryFile === pendingFilePath;
+        pendingRecoveryFile = null;
+        
+        const result = await window.electronAPI.openExistingFile(pendingFilePath, password, useRecovery);
         if (result.success) {
             currentFilePath = pendingFilePath;
+            savedContent = result.content;
+            editHistory = [];
             await createEditor(result.content);
+            
+            if (result.editHistory && result.editHistory.length > 0) {
+                isLocking = true;
+                const model = editor.getModel();
+                
+                for (const edit of result.editHistory) {
+                    if (edit.isUndo) {
+                        editor.trigger('recovery', 'undo', null);
+                    } else if (edit.isRedo) {
+                        editor.trigger('recovery', 'redo', null);
+                    } else {
+                        const edits = edit.changes.map(change => ({
+                            range: new monaco.Range(
+                                change.range.startLineNumber,
+                                change.range.startColumn,
+                                change.range.endLineNumber === Infinity ? model.getLineCount() : change.range.endLineNumber,
+                                change.range.endColumn === Infinity ? model.getLineMaxColumn(model.getLineCount()) : change.range.endColumn
+                            ),
+                            text: change.text
+                        }));
+                        editor.executeEdits('recovery', edits);
+                        editor.pushUndoStop();
+                    }
+                }
+                
+                isLocking = false;
+                editHistory = result.editHistory.slice();
+            }
+            
             hideOverlay();
-            hasUnsavedChanges = result.hasUnsavedChanges || false;
+            hasUnsavedChanges = editor.getValue() !== savedContent;
             updateWindowTitle();
         } else {
             showError('Incorrect password or corrupted file');
@@ -356,7 +439,9 @@ async function handleSave() {
     const result = await window.electronAPI.saveContent(content);
     
     if (result.success) {
+        savedContent = content;
         hasUnsavedChanges = false;
+        editHistory = [];
         updateWindowTitle();
         window.electronAPI.notifySaved();
     } else {
@@ -471,7 +556,9 @@ async function handleChangePassword() {
     
     if (result.success) {
         showChangePasswordSuccess('Password changed successfully');
+        savedContent = editor ? editor.getValue() : '';
         hasUnsavedChanges = false;
+        editHistory = [];
         updateWindowTitle();
         setTimeout(() => {
             hideChangePasswordDialog();
@@ -557,7 +644,9 @@ window.electronAPI.onSaveAsRequested(async (filePath) => {
     const result = await window.electronAPI.saveAs(filePath, content);
     if (result.success) {
         currentFilePath = filePath;
+        savedContent = content;
         hasUnsavedChanges = false;
+        editHistory = [];
         updateWindowTitle();
     }
 });
